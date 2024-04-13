@@ -54,6 +54,7 @@ COMMANDS = [
     "config",
     "init",
     "install",
+    "inspect",
     "lock",
     "new",
     "publish",
