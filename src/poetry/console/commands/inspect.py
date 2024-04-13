@@ -97,6 +97,7 @@ class InspectCommand(Command):
         if dependency:
             canonicalized_package = canonicalize_name(dependency)
 
+            pkg = None
             for locked in locked_packages:
                 if locked.name == canonicalized_package:
                     pkg = locked
