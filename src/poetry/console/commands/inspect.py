@@ -29,10 +29,10 @@ MAX_DISPLAY_LINE_LENGTH = 79
 SKIP_PROPERTIES = ("description", "summary", "metadata_version")
 
 # Metadata properties which may hold URL(s)
-URL_PROPERTIES = "project_url"
+URL_PROPERTIES = ("project_url",)
 
 # Metadata properties which may be longer than MAX_DISPLAY_LINE_LENGTH
-LONG_PROPERTIES = "license"
+LONG_PROPERTIES = ("license",)
 
 
 def display_pretty_urls(urls: list[str]) -> str:
