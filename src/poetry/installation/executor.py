@@ -18,8 +18,6 @@ from cleo.io.null_io import NullIO
 from poetry.core.packages.utils.link import Link
 
 from poetry.installation.chef import Chef
-from poetry.installation.chef import ChefBuildError
-from poetry.installation.chef import ChefInstallError
 from poetry.installation.chooser import Chooser
 from poetry.installation.operations import Install
 from poetry.installation.operations import Uninstall
@@ -34,6 +32,8 @@ from poetry.utils.helpers import get_file_hash
 from poetry.utils.helpers import get_highest_priority_hash_type
 from poetry.utils.helpers import pluralize
 from poetry.utils.helpers import remove_directory
+from poetry.utils.isolated_build import IsolatedBuildError
+from poetry.utils.isolated_build import IsolatedBuildInstallError
 from poetry.utils.pip import pip_install
 
 
@@ -96,8 +96,6 @@ class Executor:
         self._chooser = Chooser(pool, self._env, config)
 
         self._executor = ThreadPoolExecutor(max_workers=self._max_workers)
-        self._total_operations = 0
-        self._executed_operations = 0
         self._executed = {"install": 0, "update": 0, "uninstall": 0}
         self._skipped = {"install": 0, "update": 0, "uninstall": 0}
         self._sections: dict[int, SectionOutput] = {}
@@ -160,7 +158,6 @@ class Executor:
         return 0
 
     def execute(self, operations: list[Operation]) -> int:
-        self._total_operations = len(operations)
         for job_type in self._executed:
             self._executed[job_type] = 0
             self._skipped[job_type] = 0
@@ -310,7 +307,7 @@ class Executor:
                     trace = ExceptionTrace(e)
                     trace.render(io)
                     pkg = operation.package
-                    if isinstance(e, ChefBuildError):
+                    if isinstance(e, IsolatedBuildError):
                         pip_command = "pip wheel --no-cache-dir --use-pep517"
                         if pkg.develop:
                             requirement = pkg.source_url
@@ -328,7 +325,7 @@ class Executor:
                             f" running '{pip_command} \"{requirement}\"'."
                             "</info>"
                         )
-                    elif isinstance(e, ChefInstallError):
+                    elif isinstance(e, IsolatedBuildInstallError):
                         message = (
                             "<error>"
                             "Cannot install build-system.requires"
@@ -404,7 +401,6 @@ class Executor:
     def _increment_operations_count(self, operation: Operation, executed: bool) -> None:
         with self._lock:
             if executed:
-                self._executed_operations += 1
                 self._executed[operation.job_type] += 1
             else:
                 self._skipped[operation.job_type] += 1

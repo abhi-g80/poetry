@@ -132,6 +132,7 @@ class Config:
             "parallel": True,
             "max-workers": None,
             "no-binary": None,
+            "only-binary": None,
         },
         "solver": {
             "lazy-wheel": True,
@@ -144,12 +145,9 @@ class Config:
         },
     }
 
-    def __init__(
-        self, use_environment: bool = True, base_dir: Path | None = None
-    ) -> None:
+    def __init__(self, use_environment: bool = True) -> None:
         self._config = deepcopy(self.default_config)
         self._use_environment = use_environment
-        self._base_dir = base_dir
         self._config_source: ConfigSource = DictConfigSource()
         self._auth_config_source: ConfigSource = DictConfigSource()
 
@@ -323,7 +321,7 @@ class Config:
         if name == "installer.max-workers":
             return int_normalizer
 
-        if name == "installer.no-binary":
+        if name in ["installer.no-binary", "installer.only-binary"]:
             return PackageFilterPolicy.normalize
 
         return lambda val: val

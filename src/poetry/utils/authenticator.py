@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import dataclasses
 import functools
 import logging
@@ -77,10 +76,6 @@ class AuthenticatorRepositoryConfig:
 
     def certs(self, config: Config) -> RepositoryCertificateConfig:
         return RepositoryCertificateConfig.create(self.name, config)
-
-    @property
-    def http_credential_keys(self) -> list[str]:
-        return [self.url, self.netloc, self.name]
 
     def get_http_credentials(
         self, password_manager: PasswordManager, username: str | None = None
@@ -167,8 +162,7 @@ class Authenticator:
     def close(self) -> None:
         for session in self._sessions_for_netloc.values():
             if session is not None:
-                with contextlib.suppress(AttributeError):
-                    session.close()
+                session.close()
 
     def __del__(self) -> None:
         self.close()
