@@ -12,10 +12,11 @@ from poetry.console.commands.command import Command
 
 
 if TYPE_CHECKING:
+    from importlib.metadata import Distribution
+
     from cleo.io.inputs.argument import Argument
     from cleo.io.inputs.option import Option
     from cleo.ui.table import Rows
-    from importlib_metadata import PathDistribution
     from poetry.core.packages.package import Package
 
 # Define the gap required after new-line for displaying items in list in when in --compact
@@ -42,7 +43,7 @@ def display_pretty_urls(urls: list[str]) -> str:
     return DISPLAY_GAP_FOR_SAME_KEY.join(res)
 
 
-def display_pretty_list(items: list) -> str:
+def display_pretty_list(items: list[str]) -> str:
     return DISPLAY_GAP_FOR_SAME_KEY.join(items)
 
 
@@ -112,7 +113,7 @@ class InspectCommand(Command):
             import json
             import sys
 
-            json.dump(display_metadata, fp=sys.stdout)
+            json.dump(display_metadata, fp=sys.stderr)
         elif self.option("compact"):
             rows = self.build_rows_from_metadata(display_metadata)
             self.table(rows=rows, style="compact").render()
@@ -121,18 +122,18 @@ class InspectCommand(Command):
 
         return 0
 
-    def inspect_metadata(self, package: Package) -> dict:
+    def inspect_metadata(self, package: Package) -> dict[str, str | list[str]]:
         from importlib.metadata import Distribution
         from importlib.metadata import PackageNotFoundError
 
-        metadata: dict = {
+        metadata: dict[str, str | list[str]] = {
             "name": package.pretty_name,
             "version": package.pretty_version,
             "package_description": package.description,
         }
 
         try:
-            d = Distribution.from_name(package.name)
+            d: Distribution = Distribution.from_name(package.name)
         except PackageNotFoundError:
             self.line(
                 f"<warning>Could not find package metadata for name: {package.name}: showing basic info</>"
@@ -140,12 +141,11 @@ class InspectCommand(Command):
             return metadata
 
         # try to get metadata from Distribution.metadata.json
-        try:
+        if hasattr(d.metadata, "json"):
             metadata.update(d.metadata.json)
-        except Exception as err:
-            self.line(
-                f"<error>Could not find distribution metadata: {package.name}: {err}</>"
-            )
+        else:
+            # AttributeError
+            self.line(f"<error>Could not find distribution metadata: {package.name}</>")
 
         # entry points
         if ep := self.get_entry_points(d):
@@ -153,8 +153,8 @@ class InspectCommand(Command):
 
         return metadata
 
-    def get_entry_points(self, dist: PathDistribution) -> list:
-        rows: list = []
+    def get_entry_points(self, dist: Distribution) -> list[str]:
+        rows: list[str] = []
         for ep in dist.entry_points:
             rows.append(f"{ep.name} source: {ep.value}")
         return rows
@@ -163,28 +163,28 @@ class InspectCommand(Command):
         locked_repository = self.poetry.locker.locked_repository()
         locked_packages = locked_repository.packages
 
-        pkg = self.poetry.package
+        pkg: Package = self.poetry.package
         if dep:
             canonicalized_package = canonicalize_name(dep)
 
-            pkg = None
             for locked in locked_packages:
                 if locked.name == canonicalized_package:
                     pkg = locked
                     break
 
-            if not pkg:
+            if pkg == self.poetry.package:
                 raise ValueError(f"Package '{dep}' not found")
         return pkg
 
-    def build_rows_from_metadata(self, data: dict) -> Rows:
+    def build_rows_from_metadata(self, data: dict[str, str | list[str]]) -> Rows:
         rows: Rows = []
 
         for prop, items in data.items():
             if prop in SKIP_PROPERTIES:
                 continue
             if prop in URL_PROPERTIES:
-                items = display_pretty_urls(items)
+                if isinstance(items, list):
+                    items = display_pretty_urls(items)
             elif isinstance(items, list):
                 items = display_pretty_list(items)
             if prop in LONG_PROPERTIES and len(items) > MAX_DISPLAY_LINE_LENGTH:
@@ -196,7 +196,9 @@ class InspectCommand(Command):
 
         return rows
 
-    def display_normal(self, data: dict, props: list[str]) -> None:
+    def display_normal(
+        self, data: dict[str, str | list[str]], props: str | list[str]
+    ) -> None:
         for key, value in data.items():
             if key in SKIP_PROPERTIES and not props:
                 continue

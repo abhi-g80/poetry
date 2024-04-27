@@ -12,6 +12,8 @@ from tests.helpers import get_package
 
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from cleo.testers.command_tester import CommandTester
     from pytest_mock import MockerFixture
 
@@ -31,15 +33,15 @@ TEST_DATA = {
 
 
 class MockedDistribution:
-    def __init__(self, json: dict):
+    def __init__(self, json: dict[str, object]):
         self.json = json
 
     @property
-    def entry_points(self):
+    def entry_points(self) -> list[str | None] | object:
         return self.json.get("entry_points", [])
 
     @property
-    def metadata(self):
+    def metadata(self) -> Any:
         return type("Object", (), {"json": self.json})()
 
 
@@ -160,21 +162,6 @@ Author
 """,
         ),
         (
-            "--json",
-            """\
-""",
-        ),
-        (
-            "--compact",
-            """\
- Name                 : test-package-1
- Version              : 1.2.3
- Package description  : Some description.
- Author email         : testauthor@email.com
- Author               : testauthor
-""",
-        ),
-        (
             "--list-properties",
             """\
 Available properties for simple-project are:
@@ -197,7 +184,7 @@ Name
         ),
     ],
 )
-def test_show_basic_with_group_options(
+def test_inspect_basic_options(
     options: str,
     expected: str,
     tester: CommandTester,
@@ -212,4 +199,69 @@ def test_show_basic_with_group_options(
 
     tester.execute(options)
 
+    assert tester.io.fetch_output() == expected
+
+
+@pytest.mark.parametrize(
+    ("options", "expected"),
+    [
+        (
+            "--compact",
+            """\
+ Name                 : test-package-1
+ Version              : 1.2.3
+ Package description  : Some description.
+ Author email         : testauthor@email.com
+ Author               : testauthor
+""",
+        ),
+    ],
+)
+def test_inspect_compact_option(
+    options: str,
+    expected: str,
+    tester: CommandTester,
+    poetry: Poetry,
+    installed: Repository,
+    mocker: MockerFixture,
+) -> None:
+    _configure_project_with_groups(poetry, installed)
+    testinstance = MockedDistribution(TEST_DATA)
+
+    mocker.patch("importlib.metadata.Distribution.from_name", return_value=testinstance)
+
+    tester.execute(options)
+
+    output = tester.io.fetch_output()
+
+    for item, ex in zip(output.split("\n"), expected.split("\n")):
+        item = item.strip()
+        assert item == ex.strip()
+
+
+@pytest.mark.parametrize(
+    ("options", "expected"),
+    [
+        (
+            "--json",
+            """\
+{"name": "test-package-1", "version": "1.2.3", "package_description": "Some description.", "metadata_version": 2.1, "summary": "this is a test package", "author_email": "testauthor@email.com", "author": "testauthor"}
+""",
+        ),
+    ],
+)
+def test_inspect_json_option(
+    options: str,
+    expected: str,
+    tester: CommandTester,
+    poetry: Poetry,
+    installed: Repository,
+    mocker: MockerFixture,
+) -> None:
+    _configure_project_with_groups(poetry, installed)
+    testinstance = MockedDistribution(TEST_DATA)
+
+    mocker.patch("importlib.metadata.Distribution.from_name", return_value=testinstance)
+
+    tester.execute(options)
     assert tester.io.fetch_output() == expected
