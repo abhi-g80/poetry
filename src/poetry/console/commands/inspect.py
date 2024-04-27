@@ -9,7 +9,6 @@ from cleo.io.inputs.option import Option
 from packaging.utils import canonicalize_name
 
 from poetry.console.commands.command import Command
-from poetry.console.commands.group_command import GroupCommand
 
 
 if TYPE_CHECKING:
@@ -63,7 +62,6 @@ class InspectCommand(Command):
         )
     ]
     options: ClassVar[list[Option]] = [
-        *GroupCommand._group_dependency_options(),
         option("json", "j", "Display metadata as json.", flag=True),
         option("compact", "c", "Display metadata as compact table.", flag=True),
         option(
@@ -90,54 +88,42 @@ class InspectCommand(Command):
     def handle(self) -> int:
         dependency = self.argument("dependency")
 
-        locked_repository = self.poetry.locker.locked_repository()
-        locked_packages = locked_repository.packages
-
-        pkg = self.poetry.package
-        if dependency:
-            canonicalized_package = canonicalize_name(dependency)
-
-            pkg = None
-            for locked in locked_packages:
-                if locked.name == canonicalized_package:
-                    pkg = locked
-                    break
-
-            if not pkg:
-                raise ValueError(f"Package '{dependency}' not found")
-
+        pkg = self._get_package_from_dependency(dependency)
         metadata = self.inspect_metadata(pkg)
-
         available_properties = metadata.keys()
 
         if self.option("list-properties"):
             props = "\n".join(["- " + x for x in available_properties])
             self.line(f"<b>Available properties for <info>{pkg.name}</info> are:</b>")
             self.line(f"<info>{props}</info>")
-        else:
-            props = self.option("property")
-            display_metadata = {}
-            for prop in props:
-                if prop not in available_properties:
-                    self.line_error(f"<error>Property '{prop}' not available.</error>")
-                    return 1
-                display_metadata[prop] = metadata[prop]
-            display_metadata = display_metadata or metadata
-            if self.option("json"):
-                import json
-                import sys
+            return 0
 
-                json.dump(display_metadata, fp=sys.stdout)
-            elif self.option("compact"):
-                rows = self.build_rows_from_metadata(display_metadata)
-                self.table(rows=rows, style="compact").render()
-            else:
-                self.display_normal(display_metadata, props)
+        props = self.option("property")
+        display_metadata = {}
+        for prop in props:
+            if prop not in available_properties:
+                self.line_error(f"<error>Property '{prop}' not available.</error>")
+                return 1
+            display_metadata[prop] = metadata[prop]
+
+        display_metadata = display_metadata or metadata
+
+        if self.option("json"):
+            import json
+            import sys
+
+            json.dump(display_metadata, fp=sys.stdout)
+        elif self.option("compact"):
+            rows = self.build_rows_from_metadata(display_metadata)
+            self.table(rows=rows, style="compact").render()
+        else:
+            self.display_normal(display_metadata, props)
+
         return 0
 
     def inspect_metadata(self, package: Package) -> dict:
-        from importlib_metadata import Distribution
-        from importlib_metadata import PackageNotFoundError
+        from importlib.metadata import Distribution
+        from importlib.metadata import PackageNotFoundError
 
         metadata: dict = {
             "name": package.pretty_name,
@@ -172,6 +158,24 @@ class InspectCommand(Command):
         for ep in dist.entry_points:
             rows.append(f"{ep.name} source: {ep.value}")
         return rows
+
+    def _get_package_from_dependency(self, dep: str) -> Package:
+        locked_repository = self.poetry.locker.locked_repository()
+        locked_packages = locked_repository.packages
+
+        pkg = self.poetry.package
+        if dep:
+            canonicalized_package = canonicalize_name(dep)
+
+            pkg = None
+            for locked in locked_packages:
+                if locked.name == canonicalized_package:
+                    pkg = locked
+                    break
+
+            if not pkg:
+                raise ValueError(f"Package '{dep}' not found")
+        return pkg
 
     def build_rows_from_metadata(self, data: dict) -> Rows:
         rows: Rows = []
